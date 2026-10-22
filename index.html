@@ -1,0 +1,353 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>⚾ 야구 게임 – ABS 판정</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;700;900&display=swap" rel="stylesheet" />
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: #060a16;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      font-family: 'Outfit', sans-serif;
+      overflow: hidden;
+      user-select: none;
+    }
+
+    #wrapper {
+      position: relative;
+      width: 800px;
+      height: 520px;
+    }
+
+    #gameCanvas {
+      display: block;
+      border-radius: 12px;
+      box-shadow: 0 0 80px rgba(0,160,80,0.15), 0 0 0 1px rgba(255,255,255,0.05);
+      cursor: crosshair;
+    }
+
+    /* ── 스코어보드 ── */
+    #scoreboard {
+      width: 800px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      background: rgba(6,10,22,0.96);
+      border-radius: 10px 10px 0 0;
+      padding: 8px 20px;
+      border: 1px solid rgba(255,255,255,0.07);
+      border-bottom: none;
+      backdrop-filter: blur(14px);
+    }
+
+    .sb-section { display: flex; align-items: center; gap: 12px; }
+
+    .sb-inning {
+      font-size: 13px; font-weight: 900; color: #f9c74f;
+      background: rgba(249,199,79,0.1);
+      border: 1px solid rgba(249,199,79,0.25);
+      border-radius: 6px;
+      padding: 4px 10px;
+    }
+
+    .sb-score {
+      font-size: 22px; font-weight: 900; color: #fff;
+      letter-spacing: 4px;
+    }
+
+    .sb-label { font-size: 10px; color: rgba(255,255,255,0.32); font-weight: 700; text-transform: uppercase; }
+
+    .count-group { display: flex; align-items: center; gap: 6px; }
+    .count-label { font-size: 11px; color: rgba(255,255,255,0.4); font-weight: 700; min-width: 44px; text-align: right; }
+    .dots { display: flex; gap: 4px; }
+    .dot {
+      width: 11px; height: 11px; border-radius: 50%;
+      border: 2px solid rgba(255,255,255,0.18);
+      background: transparent;
+      transition: all 0.15s;
+    }
+    .dot.on-out    { background: #e63946; border-color: #e63946; box-shadow: 0 0 7px #e63946; }
+    .dot.on-strike { background: #f9c74f; border-color: #f9c74f; box-shadow: 0 0 7px #f9c74f; }
+    .dot.on-ball   { background: #06d6a0; border-color: #06d6a0; box-shadow: 0 0 7px #06d6a0; }
+
+    .abs-badge {
+      font-size: 10px; font-weight: 900;
+      background: linear-gradient(135deg, #f9c74f, #f77f00);
+      color: #1a1a1a; border-radius: 4px; padding: 3px 8px;
+      letter-spacing: 0.05em;
+    }
+
+    /* ── 투수 UI ── */
+    #pitchPanel {
+      position: absolute;
+      bottom: 10px; left: 10px;
+      background: rgba(5,8,20,0.93);
+      border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 14px;
+      padding: 12px 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 9px;
+      z-index: 10;
+      backdrop-filter: blur(14px);
+      box-shadow: 0 8px 36px rgba(0,0,0,0.65);
+      min-width: 228px;
+    }
+    #pitchPanel.hidden { display: none; }
+    #pitchPanel .panel-title {
+      font-size: 11px; font-weight: 700; color: rgba(255,255,255,0.32);
+      text-transform: uppercase; letter-spacing: 0.08em;
+      display: flex; align-items: center; gap: 6px;
+    }
+    #pitchPanel .panel-title::after {
+      content: 'ABS';
+      font-size: 9px; font-weight: 900;
+      background: linear-gradient(135deg, #f9c74f, #f77f00);
+      color: #1a1a1a; border-radius: 3px; padding: 1px 5px;
+    }
+
+    /* 존 선택 */
+    #szOuter {
+      position: relative;
+      width: 200px; height: 200px;
+      background: rgba(255,50,50,0.025);
+      border: 1.5px dashed rgba(255,70,70,0.2);
+      border-radius: 8px;
+      cursor: crosshair;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      user-select: none;
+    }
+    #szOuterLabel {
+      position: absolute;
+      top: 5px; left: 50%;
+      transform: translateX(-50%);
+      font-size: 9px; color: rgba(255,90,90,0.4); font-weight: 700;
+      pointer-events: none; white-space: nowrap;
+    }
+    #szPicker {
+      position: relative;
+      width: 120px; height: 120px;
+      border: 2px solid rgba(6,214,160,0.5);
+      border-radius: 5px;
+      background: rgba(6,214,160,0.04);
+      pointer-events: none;
+    }
+    #szGrid {
+      display: grid;
+      grid-template-columns: repeat(5,1fr);
+      grid-template-rows: repeat(5,1fr);
+      width: 100%; height: 100%;
+      pointer-events: all;
+    }
+    .sz-cell {
+      border: 0.5px solid rgba(6,214,160,0.13);
+      transition: background 0.08s;
+      cursor: crosshair;
+    }
+    .sz-cell:hover { background: rgba(6,214,160,0.22); }
+    .sz-cell.selected { background: rgba(249,199,79,0.28); }
+
+    #szTarget {
+      width: 14px; height: 14px; border-radius: 50%;
+      background: radial-gradient(circle, #f9c74f 40%, #f77f00);
+      border: 2px solid #fff; box-shadow: 0 0 10px #f9c74f;
+      position: absolute; pointer-events: none;
+      transform: translate(-50%, -50%); display: none; z-index: 5;
+    }
+
+    /* 구종 버튼 */
+    #pitchTypes { display: grid; grid-template-columns: 1fr 1fr; gap: 5px; }
+    .pt-btn {
+      font-family: 'Outfit', sans-serif; font-size: 11px; font-weight: 700;
+      padding: 6px 8px; border-radius: 7px;
+      border: 1.5px solid rgba(255,255,255,0.09);
+      background: rgba(255,255,255,0.03); color: rgba(255,255,255,0.42);
+      cursor: pointer; transition: all 0.12s;
+    }
+    .pt-btn.active { background: rgba(249,199,79,0.13); border-color: #f9c74f; color: #f9c74f; }
+    .pt-btn:hover:not(.active) { background: rgba(255,255,255,0.07); color: #fff; }
+
+    #throwBtn {
+      font-family: 'Outfit', sans-serif; font-size: 13px; font-weight: 800;
+      padding: 10px 0; border: none; border-radius: 9px;
+      background: linear-gradient(135deg,#f9c74f,#f77f00);
+      color: #1a1a1a; cursor: pointer;
+      transition: transform 0.1s, box-shadow 0.1s;
+      box-shadow: 0 3px 14px rgba(249,199,79,0.33);
+    }
+    #throwBtn:hover { transform: scale(1.04); box-shadow: 0 5px 20px rgba(249,199,79,0.52); }
+    #throwBtn:active { transform: scale(0.97); }
+
+    /* ── 타자 힌트 ── */
+    #batterHint {
+      position: absolute;
+      bottom: 36px; left: 50%;
+      transform: translateX(-50%);
+      background: rgba(5,8,20,0.88);
+      border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 50px; padding: 10px 26px;
+      color: rgba(255,255,255,0.82); font-size: 13px; font-weight: 700;
+      pointer-events: none;
+      animation: floatY 2s ease-in-out infinite;
+      white-space: nowrap;
+      backdrop-filter: blur(8px);
+    }
+    #batterHint.hidden { display: none; }
+
+    /* ── 도루 버튼 ── */
+    #stealBtn {
+      position: absolute;
+      bottom: 36px; right: 14px;
+      font-family: 'Outfit', sans-serif; font-size: 13px; font-weight: 800;
+      padding: 10px 18px; border: none; border-radius: 50px;
+      background: linear-gradient(135deg, #06d6a0, #0096a0);
+      color: #fff; cursor: pointer;
+      box-shadow: 0 3px 16px rgba(6,214,160,0.4);
+      transition: transform 0.12s, box-shadow 0.12s;
+      display: none;
+      z-index: 15;
+      white-space: nowrap;
+    }
+    #stealBtn:hover { transform: scale(1.06); box-shadow: 0 5px 22px rgba(6,214,160,0.6); }
+    #stealBtn:active { transform: scale(0.96); }
+
+    /* ── 타이밍 가이드 (하단) ── */
+    #timingGuide {
+      position: absolute;
+      bottom: 12px; left: 50%;
+      transform: translateX(-50%);
+      display: flex; gap: 2px; align-items: center;
+      pointer-events: none;
+      opacity: 0;
+      transition: opacity 0.3s;
+    }
+    #timingGuide.show { opacity: 1; }
+
+    /* ── 오버레이 ── */
+    #overlay {
+      position: absolute; inset: 0;
+      background: rgba(0,0,0,0.8);
+      backdrop-filter: blur(10px);
+      display: flex; align-items: center; justify-content: center;
+      z-index: 50; border-radius: 12px;
+    }
+    #overlay.hidden { display: none; }
+    #ovBox {
+      text-align: center;
+      display: flex; flex-direction: column; align-items: center; gap: 14px;
+    }
+    #ovTitle { font-size: 54px; font-weight: 900; color: #fff; animation: popIn 0.35s cubic-bezier(.34,1.56,.64,1); }
+    #ovSub {
+      font-size: 15px; color: rgba(255,255,255,0.58); font-weight: 600;
+      max-width: 360px; line-height: 1.6; white-space: pre-line;
+    }
+    #ovBtn {
+      font-family: 'Outfit', sans-serif; font-size: 15px; font-weight: 800;
+      padding: 13px 42px; border: none; border-radius: 50px;
+      background: linear-gradient(135deg,#f9c74f,#f77f00);
+      color: #1a1a1a; cursor: pointer;
+      box-shadow: 0 4px 22px rgba(249,199,79,0.42);
+      transition: transform 0.12s;
+    }
+    #ovBtn:hover { transform: scale(1.06); }
+
+    /* 타이밍 설명 패널 (오버레이 안) */
+    .timing-info {
+      display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 6px;
+      margin-top: 4px;
+    }
+    .timing-chip {
+      padding: 6px 10px; border-radius: 8px; font-size: 11px; font-weight: 700;
+      text-align: center;
+    }
+
+    @keyframes popIn {
+      from { transform: scale(0.4); opacity: 0; }
+      to   { transform: scale(1);   opacity: 1; }
+    }
+    @keyframes floatY {
+      0%,100% { transform: translateX(-50%) translateY(0); }
+      50%      { transform: translateX(-50%) translateY(-4px); }
+    }
+  </style>
+</head>
+<body>
+
+<div id="scoreboard">
+  <div class="sb-section">
+    <span class="sb-inning" id="sbInning">1회 초</span>
+    <div>
+      <div class="sb-label">나 : 상대</div>
+      <div class="sb-score"><span id="sbMe">0</span> - <span id="sbOpp">0</span></div>
+    </div>
+  </div>
+  <div class="sb-section" style="gap:6px">
+    <span class="abs-badge">⚡ ABS</span>
+  </div>
+  <div class="sb-section" style="gap:14px">
+    <div class="count-group">
+      <span class="count-label">아웃</span>
+      <div class="dots" id="dotOuts"></div>
+    </div>
+    <div class="count-group">
+      <span class="count-label">스트라이크</span>
+      <div class="dots" id="dotStrikes"></div>
+    </div>
+    <div class="count-group">
+      <span class="count-label">볼</span>
+      <div class="dots" id="dotBalls"></div>
+    </div>
+  </div>
+</div>
+
+<div id="wrapper">
+  <canvas id="gameCanvas" width="800" height="520"></canvas>
+
+  <!-- 투수 UI -->
+  <div id="pitchPanel" class="hidden">
+    <div class="panel-title">⚾ 투구 위치 &amp; 구종</div>
+    <div id="szOuter">
+      <span id="szOuterLabel">클릭·드래그로 정밀 선택</span>
+      <div id="szPicker">
+        <div id="szGrid"></div>
+      </div>
+      <div id="szTarget"></div>
+    </div>
+    <div id="pitchTypes">
+      <button class="pt-btn active" data-type="straight">직구</button>
+      <button class="pt-btn" data-type="curve">커브</button>
+      <button class="pt-btn" data-type="slider">슬라이더</button>
+      <button class="pt-btn" data-type="changeup">체인지업</button>
+      <button class="pt-btn" data-type="cutter" style="grid-column:span 2">커터</button>
+    </div>
+    <button id="throwBtn">⚾ 던지기!</button>
+  </div>
+
+  <!-- 타자 힌트 -->
+  <div id="batterHint" class="hidden">🏏 스페이스바 또는 클릭으로 타격!</div>
+
+  <!-- 도루 버튼 -->
+  <button id="stealBtn">🏃 도루! [S]</button>
+
+  <!-- 오버레이 -->
+  <div id="overlay">
+    <div id="ovBox">
+      <div id="ovTitle">⚾</div>
+      <div id="ovSub"></div>
+      <button id="ovBtn">시작!</button>
+    </div>
+  </div>
+</div>
+
+<script src="game.js"></script>
+</body>
+</html>
